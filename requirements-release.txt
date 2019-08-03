@@ -1,2 +1,2 @@
 aiohttp==3.5.4
-galaxy.plugin.api==0.42
+galaxy.plugin.api==0.44

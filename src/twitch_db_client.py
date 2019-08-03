@@ -43,6 +43,6 @@ def get_cookie(db_cookies_path: str, cookie_name: str) -> Optional[str]:
             , query="select value from cookies where name='{cookie}';".format(cookie=cookie_name)
         )[0]["value"]
 
-    except IndexError:
+    except Exception:
         logging.exception("Failed to get a cookie: '{cookie}'".format(cookie=cookie_name))
         return None

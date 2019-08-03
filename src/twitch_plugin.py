@@ -1,13 +1,21 @@
 import json
+import logging
 import os
+import subprocess
 import sys
-from typing import Optional
+import webbrowser
+from typing import Dict, Optional, Tuple, Union
+from urllib import parse
 
 from galaxy.api.consts import Platform
+from galaxy.api.errors import InvalidCredentials
 from galaxy.api.plugin import create_and_run_plugin, Plugin
+from galaxy.api.types import Authentication, NextStep
+
+from twitch_db_client import get_cookie
 
 
-def is_windows():
+def is_windows() -> bool:
     return sys.platform == "win32"
 
 
@@ -18,12 +26,12 @@ if is_windows():
 class TwitchPlugin(Plugin):
 
     @staticmethod
-    def _read_manifest():
+    def _read_manifest() -> str:
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "manifest.json")) as manifest:
             return json.load(manifest)
 
     @staticmethod
-    def get_client_install_location() -> Optional[str]:
+    def _get_client_install_path() -> Optional[str]:
         if is_windows():
             _CLIENT_DISPLAY_NAME = "Twitch"
             try:
@@ -47,24 +55,85 @@ class TwitchPlugin(Plugin):
                                 continue
 
             except (WindowsError, KeyError, ValueError):
+                logging.exception("Failed to get client install location")
                 return None
         else:
             return None
 
     @property
-    def twitch_exe_path(self) -> Optional[str]:
-        install_location = self.get_client_install_location()
-        if not install_location:
+    def _twitch_exe_path(self) -> Optional[str]:
+        if not self._client_install_path:
             return None
 
         if is_windows():
-            return os.path.join(install_location, "Bin", "Twitch.exe")
+            return os.path.join(self._client_install_path, "Bin", "Twitch.exe")
 
         return None
 
+    @property
+    def _db_cookies_path(self) -> Optional[str]:
+        if not self._client_install_path:
+            return None
+
+        return os.path.join(self._client_install_path, "Electron3", "Cookies")
+
+    def _get_user_info(self) -> Dict[str, str]:
+        user_info_cookie = get_cookie(self._db_cookies_path, "twilight-user.desklight")
+        if not user_info_cookie:
+            return {}
+
+        user_info = json.loads(parse.unquote(user_info_cookie))
+        if not user_info:
+            return {}
+
+        return user_info
+
     def __init__(self, reader, writer, token):
         self._manifest = self._read_manifest()
+        self._client_install_path = None
         super().__init__(Platform(self._manifest["platform"]), self._manifest["version"], reader, writer, token)
+
+    def handshake_complete(self) -> None:
+        self._client_install_path = self._get_client_install_path()
+
+    def tick(self) -> None:
+        if not self._client_install_path or not os.path.exists(self._client_install_path):
+            self._client_install_path = self._get_client_install_path()
+
+    async def authenticate(self, stored_credentials: Optional[Dict] = None) -> Union[NextStep, Authentication]:
+        if not self._twitch_exe_path or not os.path.exists(self._twitch_exe_path):
+            webbrowser.open_new_tab("https://www.twitch.tv/downloads")
+            raise InvalidCredentials
+
+        def get_auth_info() -> Optional[Tuple[str, str]]:
+            if not self._db_cookies_path or not os.path.exists(self._db_cookies_path):
+                logging.warning("No cookies db")
+                return None
+
+            user_info = self._get_user_info()
+            if not user_info:
+                logging.warning("No user info")
+                return None
+
+            user_id = user_info.get("id")
+            user_name = user_info.get("displayName")
+
+            if not user_id or not user_name:
+                logging.warning("No user id/name")
+                return None
+
+            return user_id, user_name
+
+        auth_info = get_auth_info()
+        if not auth_info:
+            subprocess.Popen(
+                [self._twitch_exe_path]
+                , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+                , cwd=self._client_install_path
+            )
+            raise InvalidCredentials
+
+        return Authentication(user_id=auth_info[0], user_name=auth_info[1])
 
 
 def main():
