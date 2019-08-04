@@ -1,6 +1,6 @@
 import os
 import subprocess
-from unittest.mock import call, ANY
+from unittest.mock import ANY, call
 
 import pytest
 from galaxy.api.errors import InvalidCredentials
@@ -8,15 +8,15 @@ from galaxy.api.types import Authentication
 
 
 @pytest.fixture()
-def mocked_client_open(mocker, mocked_install_path):
-    mock = mocker.patch("subprocess.Popen")
-    yield mock
+def mocked_client_open(process_open_mock, mocked_install_path):
+    yield process_open_mock
 
     twitch_exe_path = os.path.join(mocked_install_path, "Bin", "Twitch.exe")
-    mock.assert_called_once_with(
+    process_open_mock.assert_called_once_with(
         [twitch_exe_path]
         , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
         , cwd=mocked_install_path
+        , shell=True
     )
 
 
@@ -24,16 +24,14 @@ def mocked_client_open(mocker, mocked_install_path):
 async def test_client_not_installed(
     twitch_plugin
     , os_path_exists_mock
-    , mocker
+    , webbrowser_opentab_mock
 ):
-    webbrowser_mock = mocker.patch("webbrowser.open_new_tab")
-
     with pytest.raises(InvalidCredentials):
         twitch_plugin._client_install_path = None
         await twitch_plugin.authenticate()
 
     os_path_exists_mock.assert_not_called()
-    webbrowser_mock.assert_called_once_with("https://www.twitch.tv/downloads")
+    webbrowser_opentab_mock.assert_called_once_with("https://www.twitch.tv/downloads")
 
 
 @pytest.mark.asyncio
@@ -41,16 +39,15 @@ async def test_client_not_found(
     installed_twitch_plugin
     , mocked_install_path
     , os_path_exists_mock
-    , mocker
+    , webbrowser_opentab_mock
 ):
-    webbrowser_mock = mocker.patch("webbrowser.open_new_tab")
     os_path_exists_mock.return_value = False
 
     with pytest.raises(InvalidCredentials):
         await installed_twitch_plugin.authenticate()
 
     os_path_exists_mock.assert_called_once_with(os.path.join(mocked_install_path, "Bin", "Twitch.exe"))
-    webbrowser_mock.assert_called_once_with("https://www.twitch.tv/downloads")
+    webbrowser_opentab_mock.assert_called_once_with("https://www.twitch.tv/downloads")
 
 
 @pytest.mark.asyncio

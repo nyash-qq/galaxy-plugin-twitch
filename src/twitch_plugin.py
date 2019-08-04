@@ -63,15 +63,33 @@ class TwitchPlugin(Plugin):
         else:
             return None
 
+    @staticmethod
+    def _exec(executable: str, cwd: str = None, args: List[str] = None) -> None:
+        subprocess.Popen(
+            [executable, *(args or [])]
+            , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+            , cwd=cwd
+            , shell=True
+        )
+
     @property
     def _twitch_exe_path(self) -> Optional[str]:
         if not self._client_install_path:
             return None
 
-        if is_windows():
-            return os.path.join(self._client_install_path, "Bin", "Twitch.exe")
+        return str(os_specific(
+            win=os.path.join(self._client_install_path, "Bin", "Twitch.exe")
+            , unknown=None
+        ))
 
-        return None
+    @property
+    def _twitch_uninstaller(self) -> str:
+        return str(os_specific(
+            win=os.path.join(
+                os.path.expandvars("%PROGRAMDATA%"), "Twitch", "Games", "Uninstaller", "TwitchGameRemover.exe"
+            )
+            , unknown=""
+        ))
 
     @property
     def _db_cookies_path(self) -> Optional[str]:
@@ -143,11 +161,7 @@ class TwitchPlugin(Plugin):
 
         auth_info = get_auth_info()
         if not auth_info:
-            subprocess.Popen(
-                [self._twitch_exe_path]
-                , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
-                , cwd=self._client_install_path
-            )
+            self._exec(self._twitch_exe_path, cwd=self._client_install_path)
             raise InvalidCredentials
 
         return Authentication(user_id=auth_info[0], user_name=auth_info[1])
@@ -186,6 +200,15 @@ class TwitchPlugin(Plugin):
         except Exception:
             logging.exception("Failed to get local games")
             return []
+
+    async def install_game(self, game_id: str) -> None:
+        webbrowser.open_new_tab("twitch://fuel/{game_id}".format(game_id=game_id))
+
+    async def launch_game(self, game_id: str) -> None:
+        webbrowser.open_new_tab("twitch://fuel-launch/{game_id}".format(game_id=game_id))
+
+    async def uninstall_game(self, game_id: str) -> None:
+        self._exec(self._twitch_uninstaller, args=["-m", "Game", "-p", game_id])
 
 
 def main():

@@ -1,3 +1,6 @@
+import subprocess
+from unittest.mock import ANY
+
 import pytest
 from galaxy.api.types import LocalGame, LocalGameState
 
@@ -31,3 +34,28 @@ async def test_owned_games(db_response, owned_games, installed_twitch_plugin, db
     assert await installed_twitch_plugin.get_local_games() == owned_games
 
     db_select_mock.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_install_game(installed_twitch_plugin, webbrowser_opentab_mock):
+    await installed_twitch_plugin.install_game("game_id")
+
+    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel/game_id")
+
+
+@pytest.mark.asyncio
+async def test_launch_game(installed_twitch_plugin, webbrowser_opentab_mock):
+    await installed_twitch_plugin.launch_game("game_id")
+
+    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel-launch/game_id")
+
+
+@pytest.mark.asyncio
+async def test_uninstall_game(installed_twitch_plugin, process_open_mock) -> None:
+    await installed_twitch_plugin.uninstall_game("game_id")
+    process_open_mock.assert_called_once_with(
+        [ANY, "-m", "Game", "-p", "game_id"]
+        , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+        , cwd=None
+        , shell=True
+    )

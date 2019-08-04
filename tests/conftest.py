@@ -32,6 +32,16 @@ def db_select_mock(mocker):
 
 
 @pytest.fixture()
+def webbrowser_opentab_mock(mocker):
+    return mocker.patch("webbrowser.open_new_tab")
+
+
+@pytest.fixture()
+def process_open_mock(mocker):
+    return mocker.patch("subprocess.Popen")
+
+
+@pytest.fixture()
 def twitch_plugin_mock(manifest_mock) -> TwitchPlugin:
     manifest_mock.return_value = {
         "name": "Galaxy Twitch plugin"
