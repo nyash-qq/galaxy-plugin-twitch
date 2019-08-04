@@ -7,10 +7,10 @@ import webbrowser
 from typing import Dict, List, Optional, Tuple, TypeVar, Union
 from urllib import parse
 
-from galaxy.api.consts import Platform
+from galaxy.api.consts import LocalGameState, Platform
 from galaxy.api.errors import InvalidCredentials
 from galaxy.api.plugin import create_and_run_plugin, Plugin
-from galaxy.api.types import Authentication, Game, LicenseInfo, LicenseType, NextStep
+from galaxy.api.types import Authentication, Game, LicenseInfo, LicenseType, LocalGame, NextStep
 
 from twitch_db_client import db_select, get_cookie
 
@@ -84,6 +84,13 @@ class TwitchPlugin(Plugin):
     def _db_owned_games(self) -> str:
         return str(os_specific(
             win=os.path.join(os.path.expandvars("%APPDATA%"), "Twitch", "Games", "Sql", "GameProductInfo.sqlite")
+            , unknown=""
+        ))
+
+    @property
+    def _db_installed_games(self) -> str:
+        return str(os_specific(
+            win=os.path.join(os.path.expandvars("%PROGRAMDATA%"), "Twitch", "Games", "Sql", "GameInstallInfo.sqlite")
             , unknown=""
         ))
 
@@ -161,6 +168,23 @@ class TwitchPlugin(Plugin):
             ]
         except Exception:
             logging.exception("Failed to get owned games")
+            return []
+
+    async def get_local_games(self) -> List[LocalGame]:
+        try:
+            return [
+                LocalGame(
+                    game_id=row["Id"]
+                    , local_game_state=LocalGameState.Installed
+                )
+                for row in db_select(
+                    db_path=self._db_installed_games
+                    , query="select Id, Installed from DbSet"
+                )
+                if row.get("Installed")
+            ]
+        except Exception:
+            logging.exception("Failed to get local games")
             return []
 
 
