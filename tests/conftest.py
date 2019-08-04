@@ -22,13 +22,13 @@ def mocked_install_path():
 
 
 @pytest.fixture()
-def db_cookies_path_mock(mocker):
-    return mocker.patch("twitch_plugin.TwitchPlugin._db_cookies_path")
+def get_cookie_mock(mocker):
+    return mocker.patch("twitch_plugin.get_cookie")
 
 
 @pytest.fixture()
-def get_cookie_mock(mocker):
-    return mocker.patch("twitch_plugin.get_cookie")
+def db_select_mock(mocker):
+    return mocker.patch("twitch_plugin.db_select")
 
 
 @pytest.fixture()

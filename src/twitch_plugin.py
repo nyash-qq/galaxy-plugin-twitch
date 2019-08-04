@@ -4,15 +4,15 @@ import os
 import subprocess
 import sys
 import webbrowser
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, TypeVar, Union
 from urllib import parse
 
 from galaxy.api.consts import Platform
 from galaxy.api.errors import InvalidCredentials
 from galaxy.api.plugin import create_and_run_plugin, Plugin
-from galaxy.api.types import Authentication, NextStep
+from galaxy.api.types import Authentication, Game, LicenseInfo, LicenseType, NextStep
 
-from twitch_db_client import get_cookie
+from twitch_db_client import db_select, get_cookie
 
 
 def is_windows() -> bool:
@@ -21,6 +21,12 @@ def is_windows() -> bool:
 
 if is_windows():
     import winreg
+
+T = TypeVar("T")
+
+
+def os_specific(unknown, win: Optional[T] = None, mac: Optional[T] = None) -> Optional[T]:
+    return {"win32": win, "darwin": mac}.get(sys.platform, unknown)
 
 
 class TwitchPlugin(Plugin):
@@ -36,10 +42,7 @@ class TwitchPlugin(Plugin):
             _CLIENT_DISPLAY_NAME = "Twitch"
             try:
                 for h_root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
-                    with winreg.OpenKey(
-                        h_root,
-                        r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
-                    ) as h_apps:
+                    with winreg.OpenKey(h_root, r"Software\Microsoft\Windows\CurrentVersion\Uninstall") as h_apps:
                         for idx in range(winreg.QueryInfoKey(h_apps)[0]):
                             try:
                                 with winreg.OpenKeyEx(h_apps, winreg.EnumKey(h_apps, idx)) as h_app_info:
@@ -76,6 +79,13 @@ class TwitchPlugin(Plugin):
             return None
 
         return os.path.join(self._client_install_path, "Electron3", "Cookies")
+
+    @property
+    def _db_owned_games(self) -> str:
+        return str(os_specific(
+            win=os.path.join(os.path.expandvars("%APPDATA%"), "Twitch", "Games", "Sql", "GameProductInfo.sqlite")
+            , unknown=""
+        ))
 
     def _get_user_info(self) -> Dict[str, str]:
         user_info_cookie = get_cookie(self._db_cookies_path, "twilight-user.desklight")
@@ -134,6 +144,24 @@ class TwitchPlugin(Plugin):
             raise InvalidCredentials
 
         return Authentication(user_id=auth_info[0], user_name=auth_info[1])
+
+    async def get_owned_games(self) -> List[Game]:
+        try:
+            return [
+                Game(
+                    game_id=row["ProductIdStr"]
+                    , game_title=row["ProductTitle"]
+                    , dlcs=None
+                    , license_info=LicenseInfo(LicenseType.SinglePurchase)
+                )
+                for row in db_select(
+                    db_path=self._db_owned_games
+                    , query="select ProductIdStr, ProductTitle from DbSet"
+                )
+            ]
+        except Exception:
+            logging.exception("Failed to get owned games")
+            return []
 
 
 def main():
