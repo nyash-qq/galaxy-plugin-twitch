@@ -164,6 +164,7 @@ class TwitchPlugin(Plugin):
             self._exec(self._twitch_exe_path, cwd=self._client_install_path)
             raise InvalidCredentials
 
+        self.store_credentials({"external-credentials": "force-reconnect-on-startup"})
         return Authentication(user_id=auth_info[0], user_name=auth_info[1])
 
     async def get_owned_games(self) -> List[Game]:

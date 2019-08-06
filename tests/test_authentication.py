@@ -94,9 +94,12 @@ async def test_no_user_info(
 async def test_authenticated(
     installed_twitch_plugin
     , get_cookie_mock
+    , mocker
 ):
     get_cookie_mock.return_value = "{%22displayName%22:%22test_name%22%2C%22id%22:%224815162342%22%2C%22version%22:2}"
+    store_credentials_mock = mocker.patch("twitch_plugin.TwitchPlugin.store_credentials")
 
     assert Authentication(user_id="4815162342", user_name="test_name") == await installed_twitch_plugin.authenticate()
 
     get_cookie_mock.assert_called_once_with(ANY, "twilight-user.desklight")
+    store_credentials_mock.assert_called_once()
