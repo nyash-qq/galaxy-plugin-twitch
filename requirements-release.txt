@@ -1,2 +1,2 @@
 aiohttp==3.5.4
-galaxy.plugin.api==0.44
+git+https://github.com/gogcom/galaxy-integrations-python-api@0.44#egg=galaxy.plugin.api

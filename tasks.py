@@ -62,7 +62,7 @@ def build(ctx, output_dir=_OUTPUT_DIR):
 
     [copy(src, output_dir) for src in glob.glob("src/*.*")]
 
-    [rmtree(dir_) for dir_ in glob.glob("{}/*.dist-info".format(output_dir))]
+    [rmtree(dir_) for dir_ in glob.glob("{}/*.*-info".format(output_dir))]
 
 
 @task(build)
