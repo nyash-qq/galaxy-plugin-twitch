@@ -18,12 +18,17 @@ In order to use this plugin you have to be authenticated in [Twitch App](https:/
 
 ## Known issues and limitations
 
-* Twitch App has some problems to automatically start the installation process
+### Twitch app
+* DB contains columns for the game time tracking, but app doesn't update them. So game time tracking is not possible until GLX implements it
+* App has some problems starting games installation process automatically
+* No support for games on MacOS
 
-### TODO
+### Galaxy Client
+* "Not compatible" grey "Install" button is an issue in the GLX itself and should be fixed soon
+* "Twitch" platform does not exists in the GLX yet, so have to use "Amazon" instead. Will switch once "Twitch" is supported
+
+### Plugin TODO
 * Running games status
-* MacOS support
-* GameTime tracking
 * Friends / chat
 * Web-based (no client) library retrieval
 
