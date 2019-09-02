@@ -123,17 +123,46 @@ class TwitchPlugin(Plugin):
 
         return user_info
 
+    def _get_local_games(self) -> Dict[str, LocalGame]:
+        try:
+            return {
+                row["Id"]: LocalGame(game_id=row["Id"], local_game_state=LocalGameState.Installed)
+                for row in db_select(db_path=self._db_installed_games, query="select Id, Installed from DbSet")
+                if row.get("Installed")
+            }
+        except Exception:
+            logging.exception("Failed to get local games")
+            return {}
+
+    def _update_local_games_state(self) -> None:
+        new_games_cache = self._get_local_games()
+
+        for game_id in self._local_games_cache.keys() - new_games_cache.keys():
+            self.update_local_game_status(LocalGame(game_id, LocalGameState.None_))
+
+        for game_id, local_game in new_games_cache.items():
+            old_game = self._local_games_cache.get(game_id)
+            if old_game is None or old_game.local_game_state != local_game.local_game_state:
+                self.update_local_game_status(local_game)
+
+        self._local_games_cache = new_games_cache
+
     def __init__(self, reader, writer, token):
         self._manifest = self._read_manifest()
         self._client_install_path = None
+        self._local_games_cache: Dict[str, LocalGame] = {}
+
         super().__init__(Platform(self._manifest["platform"]), self._manifest["version"], reader, writer, token)
 
     def handshake_complete(self) -> None:
         self._client_install_path = self._get_client_install_path()
+        self._local_games_cache = self._get_local_games()
 
     def tick(self) -> None:
         if not self._client_install_path or not os.path.exists(self._client_install_path):
             self._client_install_path = self._get_client_install_path()
+
+        self._update_local_games_state()
 
     async def authenticate(self, stored_credentials: Optional[Dict] = None) -> Union[NextStep, Authentication]:
         if not self._twitch_exe_path or not os.path.exists(self._twitch_exe_path):
@@ -186,21 +215,7 @@ class TwitchPlugin(Plugin):
             return []
 
     async def get_local_games(self) -> List[LocalGame]:
-        try:
-            return [
-                LocalGame(
-                    game_id=row["Id"]
-                    , local_game_state=LocalGameState.Installed
-                )
-                for row in db_select(
-                    db_path=self._db_installed_games
-                    , query="select Id, Installed from DbSet"
-                )
-                if row.get("Installed")
-            ]
-        except Exception:
-            logging.exception("Failed to get local games")
-            return []
+        return list(self._local_games_cache.values())
 
     async def install_game(self, game_id: str) -> None:
         webbrowser.open_new_tab("twitch://fuel/{game_id}".format(game_id=game_id))
