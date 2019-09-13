@@ -1,4 +1,3 @@
-import asyncio
 from unittest.mock import MagicMock
 
 import pytest
@@ -65,8 +64,7 @@ def twitch_plugin_mock(manifest_mock) -> TwitchPlugin:
 async def twitch_plugin(twitch_plugin_mock) -> TwitchPlugin:
     yield twitch_plugin_mock
 
-    twitch_plugin_mock.shutdown()
-    await asyncio.sleep(0)
+    await twitch_plugin_mock.shutdown()
 
 
 @pytest.fixture()
@@ -74,5 +72,4 @@ async def installed_twitch_plugin(twitch_plugin_mock, mocked_install_path, os_pa
     twitch_plugin_mock._client_install_path = mocked_install_path
     yield twitch_plugin_mock
 
-    twitch_plugin_mock.shutdown()
-    await asyncio.sleep(0)
+    await twitch_plugin_mock.shutdown()
