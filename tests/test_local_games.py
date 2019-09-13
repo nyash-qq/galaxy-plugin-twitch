@@ -4,11 +4,15 @@ from unittest.mock import ANY
 import pytest
 from galaxy.api.types import LocalGame, LocalGameState
 
+_GAME_ID = "game-id"
+_INSTALL_PATH = "x:/games/game-id/game.exe"
 
-def _db_installed_game(asin: str, is_installed: bool):
+
+def _db_installed_game(asin: str, is_installed: bool, install_path: str):
     return {
         "Id": asin
         , "Installed": int(is_installed)
+        , "InstallDirectory": install_path
     }
 
 
@@ -22,41 +26,41 @@ def _installed_game(game_id):
     , ([], [])
     , (
         [
-            _db_installed_game("0c0126bf-8d56-46c0-ac10-fa07a4f2ad70", False)
-            , _db_installed_game("8530321b-a8dd-4a74-baa3-24a247454c36", True)
+            _db_installed_game("8530321b-a8dd-4a74-baa3-24a247454c36", False, "")
+            , _db_installed_game(_GAME_ID, True, _INSTALL_PATH)
         ]
-        , [LocalGame("8530321b-a8dd-4a74-baa3-24a247454c36", LocalGameState.Installed)]
-    )
+        , [LocalGame(_GAME_ID, LocalGameState.Installed)]
+    ), ([_db_installed_game(_GAME_ID, True, "")], [])
 ])
-async def test_local_games(db_response, owned_games, installed_twitch_plugin, db_select_mock):
+async def test_installed_games(db_response, owned_games, installed_twitch_plugin, db_select_mock, os_path_exists_mock):
     db_select_mock.side_effect = [db_response]
 
     installed_twitch_plugin.handshake_complete()
 
-    assert await installed_twitch_plugin.get_local_games() == owned_games
+    assert owned_games == await installed_twitch_plugin.get_local_games()
 
     db_select_mock.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_install_game(installed_twitch_plugin, webbrowser_opentab_mock):
-    await installed_twitch_plugin.install_game("game_id")
+    await installed_twitch_plugin.install_game(_GAME_ID)
 
-    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel/game_id")
+    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel/game-id")
 
 
 @pytest.mark.asyncio
 async def test_launch_game(installed_twitch_plugin, webbrowser_opentab_mock):
-    await installed_twitch_plugin.launch_game("game_id")
+    await installed_twitch_plugin.launch_game(_GAME_ID)
 
-    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel-launch/game_id")
+    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel-launch/game-id")
 
 
 @pytest.mark.asyncio
 async def test_uninstall_game(installed_twitch_plugin, process_open_mock) -> None:
-    await installed_twitch_plugin.uninstall_game("game_id")
+    await installed_twitch_plugin.uninstall_game(_GAME_ID)
     process_open_mock.assert_called_once_with(
-        [ANY, "-m", "Game", "-p", "game_id"]
+        [ANY, "-m", "Game", "-p", _GAME_ID]
         , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
         , cwd=None
         , shell=True
@@ -66,43 +70,63 @@ async def test_uninstall_game(installed_twitch_plugin, process_open_mock) -> Non
 @pytest.mark.asyncio
 @pytest.mark.parametrize("old_game_state, new_game_state, expected_call", [
     (
-        _db_installed_game("game-id", False)
-        , _db_installed_game("game-id", False)
+        _db_installed_game("game-id", False, "")
+        , _db_installed_game("game-id", False, "")
         , None
     )
     , (
-        _db_installed_game("game-id", False)
+        _db_installed_game("game-id", False, "")
+        , _db_installed_game("game-id", True, "")
+        , None
+    )
+    , (
+        _db_installed_game("game-id", False, "")
+        , _db_installed_game("game-id", False, _INSTALL_PATH)
+        , None
+    )
+    , (
+        _db_installed_game("game-id", False, "")
         , None
         , None
     )
     , (
-        _db_installed_game("game-id", False)
-        , _db_installed_game("game-id", True)
+        _db_installed_game("game-id", False, "")
+        , _db_installed_game("game-id", True, _INSTALL_PATH)
         , LocalGame("game-id", LocalGameState.Installed)
     )
     , (
-        _db_installed_game("game-id", True)
-        , _db_installed_game("game-id", True)
+        _db_installed_game("game-id", True, "")
+        , _db_installed_game("game-id", True, _INSTALL_PATH)
+        , LocalGame("game-id", LocalGameState.Installed)
+    )
+    , (
+        _db_installed_game("game-id", True, _INSTALL_PATH)
+        , _db_installed_game("game-id", True, _INSTALL_PATH)
         , None
     )
     , (
-        _db_installed_game("game-id", True)
-        , _db_installed_game("game-id", False)
+        _db_installed_game("game-id", True, _INSTALL_PATH)
+        , _db_installed_game("game-id", False, "")
         , LocalGame("game-id", LocalGameState.None_)
     )
     , (
-        _db_installed_game("game-id", True)
+        _db_installed_game("game-id", True, _INSTALL_PATH)
+        , _db_installed_game("game-id", True, "")
+        , LocalGame("game-id", LocalGameState.None_)
+    )
+    , (
+        _db_installed_game("game-id", True, _INSTALL_PATH)
         , None
         , LocalGame("game-id", LocalGameState.None_)
     )
     , (
         None
-        , _db_installed_game("game-id", False)
+        , _db_installed_game("game-id", False, "")
         , None
     )
     , (
         None
-        , _db_installed_game("game-id", True)
+        , _db_installed_game("game-id", True, _INSTALL_PATH)
         , LocalGame("game-id", LocalGameState.Installed)
     )
 ])

@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import webbrowser
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, TypeVar, Union
 from urllib import parse
 
@@ -11,7 +12,6 @@ from galaxy.api.consts import LocalGameState, Platform
 from galaxy.api.errors import InvalidCredentials
 from galaxy.api.plugin import create_and_run_plugin, Plugin
 from galaxy.api.types import Authentication, Game, LicenseInfo, LicenseType, LocalGame, NextStep
-
 from twitch_db_client import db_select, get_cookie
 
 
@@ -27,6 +27,11 @@ T = TypeVar("T")
 
 def os_specific(unknown, win: Optional[T] = None, mac: Optional[T] = None) -> Optional[T]:
     return {"win32": win, "darwin": mac}.get(sys.platform, unknown)
+
+
+@dataclass
+class InstalledGame(LocalGame):
+    install_path: str
 
 
 class TwitchPlugin(Plugin):
@@ -123,40 +128,47 @@ class TwitchPlugin(Plugin):
 
         return user_info
 
-    def _get_local_games(self) -> Dict[str, LocalGame]:
+    def _get_installed_games(self) -> Dict[str, InstalledGame]:
         try:
             return {
-                row["Id"]: LocalGame(game_id=row["Id"], local_game_state=LocalGameState.Installed)
-                for row in db_select(db_path=self._db_installed_games, query="select Id, Installed from DbSet")
-                if row.get("Installed")
+                row["Id"]: InstalledGame(
+                    game_id=row["Id"]
+                    , local_game_state=LocalGameState.Installed
+                    , install_path=row["InstallDirectory"]
+                )
+                for row in db_select(
+                    db_path=self._db_installed_games
+                    , query="select Id, Installed, InstallDirectory from DbSet"
+                )
+                if row.get("Installed") and os.path.exists(row.get("InstallDirectory", ""))
             }
         except Exception:
             logging.exception("Failed to get local games")
             return {}
 
     def _update_local_games_state(self) -> None:
-        new_games_cache = self._get_local_games()
+        installed_games = self._get_installed_games()
 
-        for game_id in self._local_games_cache.keys() - new_games_cache.keys():
+        for game_id in self._local_games_cache.keys() - installed_games.keys():
             self.update_local_game_status(LocalGame(game_id, LocalGameState.None_))
 
-        for game_id, local_game in new_games_cache.items():
+        for game_id, local_game in installed_games.items():
             old_game = self._local_games_cache.get(game_id)
             if old_game is None or old_game.local_game_state != local_game.local_game_state:
-                self.update_local_game_status(local_game)
+                self.update_local_game_status(LocalGame(game_id, local_game.local_game_state))
 
-        self._local_games_cache = new_games_cache
+        self._local_games_cache = installed_games
 
     def __init__(self, reader, writer, token):
         self._manifest = self._read_manifest()
         self._client_install_path = None
-        self._local_games_cache: Dict[str, LocalGame] = {}
+        self._local_games_cache: Dict[str, InstalledGame] = {}
 
         super().__init__(Platform(self._manifest["platform"]), self._manifest["version"], reader, writer, token)
 
     def handshake_complete(self) -> None:
         self._client_install_path = self._get_client_install_path()
-        self._local_games_cache = self._get_local_games()
+        self._local_games_cache = self._get_installed_games()
 
     def tick(self) -> None:
         if not self._client_install_path or not os.path.exists(self._client_install_path):
@@ -215,7 +227,10 @@ class TwitchPlugin(Plugin):
             return []
 
     async def get_local_games(self) -> List[LocalGame]:
-        return list(self._local_games_cache.values())
+        return [
+            LocalGame(game_id=game.game_id, local_game_state=game.local_game_state)
+            for game in self._local_games_cache.values()
+        ]
 
     async def install_game(self, game_id: str) -> None:
         webbrowser.open_new_tab("twitch://fuel/{game_id}".format(game_id=game_id))
