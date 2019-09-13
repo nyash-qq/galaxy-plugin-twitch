@@ -12,6 +12,7 @@ from galaxy.api.consts import LocalGameState, Platform
 from galaxy.api.errors import InvalidCredentials
 from galaxy.api.plugin import create_and_run_plugin, Plugin
 from galaxy.api.types import Authentication, Game, LicenseInfo, LicenseType, LocalGame, NextStep
+from galaxy.proc_tools import process_iter
 from twitch_db_client import db_select, get_cookie
 
 
@@ -146,18 +147,41 @@ class TwitchPlugin(Plugin):
             logging.exception("Failed to get local games")
             return {}
 
-    def _update_local_games_state(self) -> None:
+    def _get_local_games(self) -> Dict[str, InstalledGame]:
         installed_games = self._get_installed_games()
+        if not installed_games:
+            return installed_games
 
-        for game_id in self._local_games_cache.keys() - installed_games.keys():
+        running_processes = [
+            proc_info.binary_path
+            for proc_info in process_iter()
+            if proc_info and proc_info.binary_path
+        ]
+
+        def is_game_running(game_install_path) -> bool:
+            for process_path in running_processes:
+                if process_path.startswith(game_install_path):
+                    return True
+            return False
+
+        for installed_game in installed_games.values():
+            if is_game_running(installed_game.install_path):
+                installed_game.local_game_state |= LocalGameState.Running
+
+        return installed_games
+
+    def _update_local_games_state(self) -> None:
+        local_games = self._get_local_games()
+
+        for game_id in self._local_games_cache.keys() - local_games.keys():
             self.update_local_game_status(LocalGame(game_id, LocalGameState.None_))
 
-        for game_id, local_game in installed_games.items():
+        for game_id, local_game in local_games.items():
             old_game = self._local_games_cache.get(game_id)
             if old_game is None or old_game.local_game_state != local_game.local_game_state:
                 self.update_local_game_status(LocalGame(game_id, local_game.local_game_state))
 
-        self._local_games_cache = installed_games
+        self._local_games_cache = local_games
 
     def __init__(self, reader, writer, token):
         self._manifest = self._read_manifest()
@@ -168,7 +192,7 @@ class TwitchPlugin(Plugin):
 
     def handshake_complete(self) -> None:
         self._client_install_path = self._get_client_install_path()
-        self._local_games_cache = self._get_installed_games()
+        self._local_games_cache = self._get_local_games()
 
     def tick(self) -> None:
         if not self._client_install_path or not os.path.exists(self._client_install_path):
