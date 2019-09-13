@@ -12,7 +12,6 @@ def db_path_mock():
 
 @pytest.fixture()
 def db_connect_mock(db_path_mock, os_path_exists_mock, mocker):
-    os_path_exists_mock.return_value = True
     connect = mocker.patch("sqlite3.connect")
 
     yield connect
@@ -49,14 +48,11 @@ def db_query_fetchall(db_execute_mock):
     db_query_fetchall.assert_called_once_with()
 
 
-def test_no_db(os_path_exists_mock):
-    db_path = "invalid-path"
-    os_path_exists_mock.return_value = False
-
+def test_no_db(os_path_exists_mock, invalid_path):
     with pytest.raises(FileNotFoundError):
-        db_select(db_path=db_path, query="")
+        db_select(db_path=invalid_path, query="")
 
-    os_path_exists_mock.assert_called_once_with(db_path)
+    os_path_exists_mock.assert_called_once_with(invalid_path)
 
 
 def test_cannot_connect(db_connect_mock, db_path_mock):

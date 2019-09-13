@@ -2,13 +2,17 @@ import asyncio
 from unittest.mock import MagicMock
 
 import pytest
-
 from twitch_plugin import TwitchPlugin
 
 
 @pytest.fixture()
-def os_path_exists_mock(mocker):
-    return mocker.patch("os.path.exists")
+def invalid_path():
+    return "invalid_path"
+
+
+@pytest.fixture()
+def os_path_exists_mock(mocker, invalid_path):
+    return mocker.patch("os.path.exists", side_effect=lambda path: path and invalid_path not in path)
 
 
 @pytest.fixture()
@@ -68,7 +72,6 @@ async def twitch_plugin(twitch_plugin_mock) -> TwitchPlugin:
 @pytest.fixture()
 async def installed_twitch_plugin(twitch_plugin_mock, mocked_install_path, os_path_exists_mock) -> TwitchPlugin:
     twitch_plugin_mock._client_install_path = mocked_install_path
-    os_path_exists_mock.return_value = True
     yield twitch_plugin_mock
 
     twitch_plugin_mock.shutdown()

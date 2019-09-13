@@ -36,17 +36,17 @@ async def test_client_not_installed(
 
 @pytest.mark.asyncio
 async def test_client_not_found(
-    installed_twitch_plugin
-    , mocked_install_path
+    twitch_plugin
+    , invalid_path
     , os_path_exists_mock
     , webbrowser_opentab_mock
 ):
-    os_path_exists_mock.return_value = False
+    twitch_plugin._client_install_path = invalid_path
 
     with pytest.raises(InvalidCredentials):
-        await installed_twitch_plugin.authenticate()
+        await twitch_plugin.authenticate()
 
-    os_path_exists_mock.assert_called_once_with(os.path.join(mocked_install_path, "Bin", "Twitch.exe"))
+    os_path_exists_mock.assert_called_once_with(os.path.join(invalid_path, "Bin", "Twitch.exe"))
     webbrowser_opentab_mock.assert_called_once_with("https://www.twitch.tv/downloads")
 
 
