@@ -3,7 +3,7 @@ from unittest.mock import ANY
 
 import pytest
 from galaxy.api.types import LocalGame, LocalGameState
-from galaxy.proc_tools import ProcessInfo, ProcessId
+from galaxy.proc_tools import ProcessId, ProcessInfo
 
 _GAME_ID = "game-id"
 _INSTALL_PATH = "x:/games/game-id"
@@ -17,6 +17,7 @@ _PROCESS_LIST_GAME_RUNNING = [
     , ProcessInfo(ProcessId(666), _GAME_BIN_PATH)
     , ProcessInfo(ProcessId(42), "games/game-id/game.exe")
 ]
+
 
 def _db_installed_game(asin: str, is_installed: bool, install_path: str):
     return {
@@ -33,6 +34,11 @@ def _installed_game(game_id):
 @pytest.fixture()
 def process_iter_mock(mocker):
     return mocker.patch("twitch_plugin.process_iter")
+
+
+@pytest.fixture()
+def get_owned_games_mock(mocker):
+    return mocker.patch("twitch_plugin.TwitchPlugin._get_owned_games", return_value={})
 
 
 @pytest.mark.asyncio
@@ -62,6 +68,7 @@ async def test_installed_games(
     , db_select_mock
     , os_path_exists_mock
     , process_iter_mock
+    , get_owned_games_mock
 ):
     db_select_mock.side_effect = [db_response]
     process_iter_mock.side_effect = [running_processes]
@@ -201,6 +208,7 @@ async def test_local_game_update(
     , installed_twitch_plugin
     , db_select_mock
     , process_iter_mock
+    , get_owned_games_mock
     , mocker
 ):
     # prepare

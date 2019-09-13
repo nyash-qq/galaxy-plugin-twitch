@@ -129,6 +129,35 @@ class TwitchPlugin(Plugin):
 
         return user_info
 
+    def _get_owned_games(self) -> Dict[str, Game]:
+        try:
+            return {
+                row["ProductIdStr"]: Game(
+                    game_id=row["ProductIdStr"]
+                    , game_title=row["ProductTitle"]
+                    , dlcs=None
+                    , license_info=LicenseInfo(LicenseType.SinglePurchase)
+                )
+                for row in db_select(
+                    db_path=self._db_owned_games
+                    , query="select ProductIdStr, ProductTitle from DbSet"
+                )
+            }
+        except Exception:
+            logging.exception("Failed to get owned games")
+            return {}
+
+    def _update_owned_games(self) -> None:
+        owned_games = self._get_owned_games()
+
+        for game_id in self._owned_games_cache.keys() - owned_games.keys():
+            self.remove_game(game_id)
+
+        for game_id in (owned_games.keys() - self._owned_games_cache.keys()):
+            self.add_game(owned_games[game_id])
+
+        self._owned_games_cache = owned_games
+
     def _get_installed_games(self) -> Dict[str, InstalledGame]:
         try:
             return {
@@ -186,18 +215,21 @@ class TwitchPlugin(Plugin):
     def __init__(self, reader, writer, token):
         self._manifest = self._read_manifest()
         self._client_install_path = None
+        self._owned_games_cache: Dict[str, Game] = {}
         self._local_games_cache: Dict[str, InstalledGame] = {}
 
         super().__init__(Platform(self._manifest["platform"]), self._manifest["version"], reader, writer, token)
 
     def handshake_complete(self) -> None:
         self._client_install_path = self._get_client_install_path()
+        self._owned_games_cache = self._get_owned_games()
         self._local_games_cache = self._get_local_games()
 
     def tick(self) -> None:
         if not self._client_install_path or not os.path.exists(self._client_install_path):
             self._client_install_path = self._get_client_install_path()
 
+        self._update_owned_games()
         self._update_local_games_state()
 
     async def authenticate(self, stored_credentials: Optional[Dict] = None) -> Union[NextStep, Authentication]:
@@ -233,22 +265,7 @@ class TwitchPlugin(Plugin):
         return Authentication(user_id=auth_info[0], user_name=auth_info[1])
 
     async def get_owned_games(self) -> List[Game]:
-        try:
-            return [
-                Game(
-                    game_id=row["ProductIdStr"]
-                    , game_title=row["ProductTitle"]
-                    , dlcs=None
-                    , license_info=LicenseInfo(LicenseType.SinglePurchase)
-                )
-                for row in db_select(
-                    db_path=self._db_owned_games
-                    , query="select ProductIdStr, ProductTitle from DbSet"
-                )
-            ]
-        except Exception:
-            logging.exception("Failed to get owned games")
-            return []
+        return list(self._owned_games_cache.values())
 
     async def get_local_games(self) -> List[LocalGame]:
         return [
