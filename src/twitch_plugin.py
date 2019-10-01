@@ -274,10 +274,10 @@ class TwitchPlugin(Plugin):
         ]
 
     async def install_game(self, game_id: str) -> None:
-        webbrowser.open_new_tab("twitch://fuel/{game_id}".format(game_id=game_id))
+        webbrowser.open_new_tab(f"twitch://fuel/{game_id}")
 
     async def launch_game(self, game_id: str) -> None:
-        webbrowser.open_new_tab("twitch://fuel-launch/{game_id}".format(game_id=game_id))
+        webbrowser.open_new_tab(f"twitch://fuel-launch/{game_id}")
 
     async def uninstall_game(self, game_id: str) -> None:
         self._exec(self._twitch_uninstaller, args=["-m", "Game", "-p", game_id])

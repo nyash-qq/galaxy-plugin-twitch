@@ -17,7 +17,7 @@ def db_connect_mock(db_path_mock, os_path_exists_mock, mocker):
     yield connect
 
     os_path_exists_mock.assert_called_once_with(db_path_mock)
-    connect.assert_called_once_with("file:{}?mode=ro".format(db_path_mock), uri=True)
+    connect.assert_called_once_with(f"file:{db_path_mock}?mode=ro", uri=True)
 
 
 @pytest.fixture()

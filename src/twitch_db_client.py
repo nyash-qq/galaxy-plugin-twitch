@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 
 @contextmanager
 def _db_connect(db_path: str):
-    db = sqlite3.connect("file:{db_path}?mode=ro".format(db_path=db_path), uri=True)
+    db = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         yield db
 
@@ -27,7 +27,7 @@ def _db_cursor(db):
 
 def db_select(db_path: str, query: str) -> Optional[List[Dict]]:
     if not os.path.exists(db_path):
-        raise FileNotFoundError("DB {db} does not exists".format(db=db_path))
+        raise FileNotFoundError(f"DB {db_path} does not exists")
 
     with _db_connect(db_path=db_path) as db:
         with _db_cursor(db=db) as cursor:
@@ -40,9 +40,9 @@ def get_cookie(db_cookies_path: str, cookie_name: str) -> Optional[str]:
     try:
         return db_select(
             db_path=db_cookies_path
-            , query="select value from cookies where name='{cookie}';".format(cookie=cookie_name)
+            , query=f"select value from cookies where name='{cookie_name}';"
         )[0]["value"]
 
     except Exception:
-        logging.exception("Failed to get a cookie: '{cookie}'".format(cookie=cookie_name))
+        logging.exception(f"Failed to get a cookie: '{cookie_name}'")
         return None
