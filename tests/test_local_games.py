@@ -1,6 +1,3 @@
-import subprocess
-from unittest.mock import ANY
-
 import pytest
 from galaxy.api.types import LocalGame, LocalGameState
 from galaxy.proc_tools import ProcessId, ProcessInfo
@@ -83,28 +80,24 @@ async def test_installed_games(
 
 
 @pytest.mark.asyncio
-async def test_install_game(installed_twitch_plugin, webbrowser_opentab_mock):
-    await installed_twitch_plugin.install_game(_GAME_ID)
-
-    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel/game-id")
-
-
-@pytest.mark.asyncio
-async def test_launch_game(installed_twitch_plugin, webbrowser_opentab_mock):
+async def test_install_game(installed_twitch_plugin, twitch_launcher_mock):
     await installed_twitch_plugin.launch_game(_GAME_ID)
 
-    webbrowser_opentab_mock.assert_called_once_with("twitch://fuel-launch/game-id")
+    twitch_launcher_mock.launch_game.assert_called_once_with(_GAME_ID)
 
 
 @pytest.mark.asyncio
-async def test_uninstall_game(installed_twitch_plugin, process_open_mock) -> None:
+async def test_launch_game(installed_twitch_plugin, twitch_launcher_mock):
+    await installed_twitch_plugin.launch_game(_GAME_ID)
+
+    twitch_launcher_mock.launch_game.assert_called_once_with(_GAME_ID)
+
+
+@pytest.mark.asyncio
+async def test_uninstall_game(installed_twitch_plugin, twitch_launcher_mock) -> None:
     await installed_twitch_plugin.uninstall_game(_GAME_ID)
-    process_open_mock.assert_called_once_with(
-        [ANY, "-m", "Game", "-p", _GAME_ID]
-        , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
-        , cwd=None
-        , shell=True
-    )
+
+    twitch_launcher_mock.uninstall_game.assert_called_once_with(_GAME_ID)
 
 
 @pytest.mark.asyncio

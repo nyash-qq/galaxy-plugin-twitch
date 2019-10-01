@@ -1,7 +1,6 @@
 import json
 import logging
 import os
-import subprocess
 import sys
 import webbrowser
 from dataclasses import dataclass
@@ -13,15 +12,14 @@ from galaxy.api.errors import InvalidCredentials
 from galaxy.api.plugin import create_and_run_plugin, Plugin
 from galaxy.api.types import Authentication, Game, LicenseInfo, LicenseType, LocalGame, NextStep
 from galaxy.proc_tools import process_iter
+
 from twitch_db_client import db_select, get_cookie
+from twitch_launcher_client import TwitchLauncherClient
 
 
 def is_windows() -> bool:
     return sys.platform == "win32"
 
-
-if is_windows():
-    import winreg
 
 T = TypeVar("T")
 
@@ -42,68 +40,6 @@ class TwitchPlugin(Plugin):
         with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "manifest.json")) as manifest:
             return json.load(manifest)
 
-    @staticmethod
-    def _get_client_install_path() -> Optional[str]:
-        if is_windows():
-            _CLIENT_DISPLAY_NAME = "Twitch"
-            try:
-                for h_root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
-                    with winreg.OpenKey(h_root, r"Software\Microsoft\Windows\CurrentVersion\Uninstall") as h_apps:
-                        for idx in range(winreg.QueryInfoKey(h_apps)[0]):
-                            try:
-                                with winreg.OpenKeyEx(h_apps, winreg.EnumKey(h_apps, idx)) as h_app_info:
-                                    def get_value(key):
-                                        return winreg.QueryValueEx(h_app_info, key)[0]
-
-                                    if get_value("DisplayName") == _CLIENT_DISPLAY_NAME:
-                                        installer_path = get_value("InstallLocation")
-                                        if os.path.exists(str(installer_path)):
-                                            return installer_path
-
-                            except (WindowsError, KeyError, ValueError):
-                                continue
-
-            except (WindowsError, KeyError, ValueError):
-                logging.exception("Failed to get client install location")
-                return None
-        else:
-            return None
-
-    @staticmethod
-    def _exec(executable: str, cwd: str = None, args: List[str] = None) -> None:
-        subprocess.Popen(
-            [executable, *(args or [])]
-            , creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
-            , cwd=cwd
-            , shell=True
-        )
-
-    @property
-    def _twitch_exe_path(self) -> Optional[str]:
-        if not self._client_install_path:
-            return None
-
-        return str(os_specific(
-            win=os.path.join(self._client_install_path, "Bin", "Twitch.exe")
-            , unknown=None
-        ))
-
-    @property
-    def _twitch_uninstaller(self) -> str:
-        return str(os_specific(
-            win=os.path.join(
-                os.path.expandvars("%PROGRAMDATA%"), "Twitch", "Games", "Uninstaller", "TwitchGameRemover.exe"
-            )
-            , unknown=""
-        ))
-
-    @property
-    def _db_cookies_path(self) -> Optional[str]:
-        if not self._client_install_path:
-            return None
-
-        return os.path.join(self._client_install_path, "Electron3", "Cookies")
-
     @property
     def _db_owned_games(self) -> str:
         return str(os_specific(
@@ -118,8 +54,13 @@ class TwitchPlugin(Plugin):
             , unknown=""
         ))
 
-    def _get_user_info(self) -> Dict[str, str]:
-        user_info_cookie = get_cookie(self._db_cookies_path, "twilight-user.desklight")
+    def _get_user_info(self) -> Optional[Dict[str, str]]:
+        cookies_db_path = self._launcher_client.cookies_db_path
+        if not cookies_db_path:
+            logging.warning("Cookies db not found")
+            return None
+
+        user_info_cookie = get_cookie(cookies_db_path, "twilight-user.desklight")
         if not user_info_cookie:
             return {}
 
@@ -214,34 +155,28 @@ class TwitchPlugin(Plugin):
 
     def __init__(self, reader, writer, token):
         self._manifest = self._read_manifest()
-        self._client_install_path = None
+        self._launcher_client = TwitchLauncherClient()
         self._owned_games_cache: Dict[str, Game] = {}
         self._local_games_cache: Dict[str, InstalledGame] = {}
 
         super().__init__(Platform(self._manifest["platform"]), self._manifest["version"], reader, writer, token)
 
     def handshake_complete(self) -> None:
-        self._client_install_path = self._get_client_install_path()
+        self._launcher_client.update_install_path()
         self._owned_games_cache = self._get_owned_games()
         self._local_games_cache = self._get_local_games()
 
     def tick(self) -> None:
-        if not self._client_install_path or not os.path.exists(self._client_install_path):
-            self._client_install_path = self._get_client_install_path()
-
+        self._launcher_client.update_install_path()
         self._update_owned_games()
         self._update_local_games_state()
 
     async def authenticate(self, stored_credentials: Optional[Dict] = None) -> Union[NextStep, Authentication]:
-        if not self._twitch_exe_path or not os.path.exists(self._twitch_exe_path):
+        if not self._launcher_client.is_installed:
             webbrowser.open_new_tab("https://www.twitch.tv/downloads")
             raise InvalidCredentials
 
         def get_auth_info() -> Optional[Tuple[str, str]]:
-            if not self._db_cookies_path or not os.path.exists(self._db_cookies_path):
-                logging.warning("No cookies db")
-                return None
-
             user_info = self._get_user_info()
             if not user_info:
                 logging.warning("No user info")
@@ -258,7 +193,7 @@ class TwitchPlugin(Plugin):
 
         auth_info = get_auth_info()
         if not auth_info:
-            self._exec(self._twitch_exe_path, cwd=self._client_install_path)
+            self._launcher_client.start_client()
             raise InvalidCredentials
 
         self.store_credentials({"external-credentials": "force-reconnect-on-startup"})
@@ -274,13 +209,13 @@ class TwitchPlugin(Plugin):
         ]
 
     async def install_game(self, game_id: str) -> None:
-        webbrowser.open_new_tab(f"twitch://fuel/{game_id}")
+        self._launcher_client.launch_game(game_id)
 
     async def launch_game(self, game_id: str) -> None:
-        webbrowser.open_new_tab(f"twitch://fuel-launch/{game_id}")
+        self._launcher_client.launch_game(game_id)
 
     async def uninstall_game(self, game_id: str) -> None:
-        self._exec(self._twitch_uninstaller, args=["-m", "Game", "-p", game_id])
+        self._launcher_client.uninstall_game(game_id)
 
 
 def main():
