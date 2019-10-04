@@ -1,9 +1,11 @@
+import asyncio
 import logging
 import os
 import subprocess
 import sys
 import webbrowser
 from typing import List, Optional, TypeVar
+from galaxy.proc_tools import process_iter
 
 
 def is_windows() -> bool:
@@ -12,6 +14,7 @@ def is_windows() -> bool:
 
 if is_windows():
     import winreg
+    import ctypes
 
 T = TypeVar("T")
 
@@ -21,8 +24,32 @@ def os_specific(unknown, win: Optional[T] = None, mac: Optional[T] = None) -> Op
 
 
 class TwitchLauncherClient:
-
     _LAUNCHER_DISPLAY_NAME = "Twitch"
+
+    def _find_launcher_window(self) -> Optional[str]:
+        return ctypes.windll.user32.FindWindowW(None, self._LAUNCHER_DISPLAY_NAME) or None
+
+    @property
+    def _is_launcher_agent_running(self) -> bool:
+        for proc_info in process_iter():
+            if proc_info.binary_path and proc_info.binary_path.endswith("TwitchAgent.exe"):
+                return True
+        return False
+
+    @property
+    def _is_launcher_running(self) -> bool:
+        return bool(self._find_launcher_window())
+
+    def _hide_launcher(self) -> bool:
+        h_launcher_wnd = self._find_launcher_window()
+        if not h_launcher_wnd:
+            return False
+
+        if ctypes.windll.user32.IsWindowVisible(h_launcher_wnd):
+            ctypes.windll.user32.ShowWindow(h_launcher_wnd, 0x0000)
+            return True
+
+        return False
 
     def _get_launcher_install_path(self) -> Optional[str]:
         if is_windows():
@@ -96,11 +123,26 @@ class TwitchLauncherClient:
         if not self._launcher_install_path or not os.path.exists(self._launcher_install_path):
             self._launcher_install_path = self._get_launcher_install_path()
 
-    def start_client(self) -> None:
-        self._exec(self._launcher_path, cwd=self._launcher_install_path)
+    async def start_launcher(self) -> None:
+        if self._is_launcher_running:
+            return
 
-    @staticmethod
-    def launch_game(game_id: str) -> None:
+        self._exec(self._launcher_path, cwd=self._launcher_install_path)
+        while not self._hide_launcher():
+            await asyncio.sleep(0.1)
+
+    def quit_launcher(self) -> None:
+        if not self._is_launcher_running:
+            return
+
+        self._exec(self._launcher_path, cwd=self._launcher_install_path, args=["/exit"])
+
+    async def launch_game(self, game_id: str) -> None:
+        if not self._is_launcher_running:
+            await self.start_launcher()
+            # even after launcher is started, we still have to wait some time, otherwise it ignores game launch commands
+            await asyncio.sleep(3)
+
         webbrowser.open_new_tab(f"twitch://fuel-launch/{game_id}")
 
     def uninstall_game(self, game_id: str) -> None:

@@ -25,7 +25,7 @@ async def test_cookies_db_not_found(
 
     cookies_db_path_mock.assert_called_once_with()
     os_path_exists_mock.assert_called_once_with(cookies_db_path_mock.return_value)
-    twitch_launcher_mock.start_client.assert_called_once_with()
+    twitch_launcher_mock.start_launcher.assert_called_once_with()
 
 
 @pytest.mark.asyncio
@@ -48,7 +48,7 @@ async def test_no_user_info(
         await installed_twitch_plugin.authenticate()
 
     get_cookie_mock.assert_called_once_with(ANY, "twilight-user.desklight")
-    twitch_launcher_mock.start_client.assert_called_once_with()
+    twitch_launcher_mock.start_launcher.assert_called_once_with()
 
 
 @pytest.mark.asyncio

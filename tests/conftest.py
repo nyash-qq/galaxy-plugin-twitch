@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, PropertyMock
 import pytest
 
 from twitch_plugin import TwitchPlugin
-
+from galaxy.unittest.mock import AsyncMock
 
 @pytest.fixture()
 def invalid_path():
@@ -62,8 +62,8 @@ def twitch_launcher_mock(is_launcher_installed_mock, cookies_db_path_mock):
     type(twitch_launcher).is_installed = is_launcher_installed_mock
     type(twitch_launcher).cookies_db_path = cookies_db_path_mock
     twitch_launcher.update_install_path = MagicMock()
-    twitch_launcher.start_client = MagicMock()
-    twitch_launcher.launch_game = MagicMock()
+    twitch_launcher.start_launcher = AsyncMock()
+    twitch_launcher.launch_game = AsyncMock()
     twitch_launcher.uninstall_game = MagicMock()
     return twitch_launcher
 

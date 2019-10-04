@@ -193,7 +193,7 @@ class TwitchPlugin(Plugin):
 
         auth_info = get_auth_info()
         if not auth_info:
-            self._launcher_client.start_client()
+            await self._launcher_client.start_launcher()
             raise InvalidCredentials
 
         self.store_credentials({"external-credentials": "force-reconnect-on-startup"})
@@ -209,13 +209,20 @@ class TwitchPlugin(Plugin):
         ]
 
     async def install_game(self, game_id: str) -> None:
-        self._launcher_client.launch_game(game_id)
+        return await self._launcher_client.launch_game(game_id)
 
     async def launch_game(self, game_id: str) -> None:
-        self._launcher_client.launch_game(game_id)
+        return await self._launcher_client.launch_game(game_id)
 
     async def uninstall_game(self, game_id: str) -> None:
-        self._launcher_client.uninstall_game(game_id)
+        return self._launcher_client.uninstall_game(game_id)
+
+    if is_windows():
+        async def launch_platform_client(self) -> None:
+            return await self._launcher_client.start_launcher()
+
+        async def shutdown_platform_client(self) -> None:
+            return self._launcher_client.quit_launcher()
 
 
 def main():
