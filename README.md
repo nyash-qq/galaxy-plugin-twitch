@@ -35,9 +35,6 @@ In order to use this plugin you have to be authenticated in [Twitch App](https:/
 * App has some problems starting games installation process automatically
 * No support for games on MacOS
 
-### Galaxy Client
-* "Not compatible" grey "Install" button is an issue in the GLX itself and should be fixed soon™
-
 ### Plugin TODO
 * Friends / chat
 * Web-based (no client) library retrieval

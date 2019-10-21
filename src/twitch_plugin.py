@@ -4,10 +4,10 @@ import os
 import sys
 import webbrowser
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, TypeVar, Union
+from typing import Any, Dict, List, Optional, Tuple, TypeVar, Union
 from urllib import parse
 
-from galaxy.api.consts import LocalGameState, Platform
+from galaxy.api.consts import LocalGameState, OSCompatibility, Platform
 from galaxy.api.errors import InvalidCredentials
 from galaxy.api.plugin import create_and_run_plugin, Plugin
 from galaxy.api.types import Authentication, Game, LicenseInfo, LicenseType, LocalGame, NextStep
@@ -223,6 +223,9 @@ class TwitchPlugin(Plugin):
 
         async def shutdown_platform_client(self) -> None:
             return self._launcher_client.quit_launcher()
+
+        async def get_os_compatibility(self, game_id: str, context: Any) -> Optional[OSCompatibility]:
+            return OSCompatibility.Windows
 
 
 def main():
